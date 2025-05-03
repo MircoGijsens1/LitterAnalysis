@@ -3,7 +3,7 @@ import os
 import json
 import shutil
 from flet import FilePickerUploadFile
-import datetime
+from datetime import datetime
 import asyncio
 
 
@@ -126,6 +126,22 @@ def main(page: ft.Page):
     )
 
     #Camera export view
+    def update_textfield_from_picker(e, textfield):
+        if e.control.value:
+            textfield.value = e.control.value.strftime('%d-%m-%Y')
+            textfield.error_text = None
+            page.update() 
+    def validate_date_input(date_input, datepicker):
+        print(date_input.value)
+        date_input.error_text = None
+        try:
+            datetime.strptime(date_input.value, "%d-%m-%Y")
+            datepicker.value = datetime.strptime(date_input.value, "%d-%m-%Y")
+            #print("Valid date typed:", date_input.value)
+        except ValueError:
+            date_input.error_text = "Invalid date format"
+        page.update() 
+
     def handle_startdate_change(e):
         update_textfield_from_picker(e, startdate_input)
         
@@ -135,25 +151,26 @@ def main(page: ft.Page):
 
     
     start_date_picker = ft.DatePicker(
-            on_change=handle_startdate_change,
-            on_dismiss=handle_startdate_dismissal
+            on_change=lambda e: update_textfield_from_picker(e, startdate_input),
          )
     page.overlay.append(start_date_picker)
     startdate_input = ft.TextField(
         label="Startdate",
         hint_text="DD-MM-YYYY",
-        width=200
+        width=200,
+        on_blur=lambda e: validate_date_input(startdate_input, start_date_picker),
     )
     end_date_picker = ft.DatePicker(            
-            on_change=handle_startdate_change,
-            on_dismiss=handle_startdate_dismissal
+            on_change=lambda e: update_textfield_from_picker(e, enddate_input),
         )
     page.overlay.append(end_date_picker)        
-
-    def update_textfield_from_picker(e, textfield):
-        if e.control.value:
-            textfield.value = e.control.value.strftime('%d-%m-%Y')
-            page.update() 
+    enddate_input = ft.TextField(
+        label="Enddate",
+        hint_text="DD-MM-YYYY",
+        width=200,
+        on_blur=lambda e: validate_date_input(enddate_input, end_date_picker),
+    )
+    
 
     camera_view = ft.View(
         "/",
@@ -170,19 +187,35 @@ def main(page: ft.Page):
                 expand=True,
                 padding=ft.padding.only( top=40),
                 content= ft.Container(
-                        width=500, 
+                        width=800, 
                         content=ft.Column(
                             controls=[
                                 ft.Row(
                                     controls=[
-                                        ft.Row(
-                                            controls=[
-                                                startdate_input,
-                                                ft.IconButton(
-                                                    icon=ft.Icons.CALENDAR_MONTH,
-                                                    on_click=lambda e: page.open(start_date_picker)
-                                                )
-                                            ]
+                                        ft.Container(
+                                            content=ft.Row(
+                                                        controls=[
+                                                            startdate_input,
+                                                            ft.IconButton(
+                                                                icon=ft.Icons.CALENDAR_MONTH,
+                                                                on_click=lambda e: page.open(start_date_picker)
+                                                            )
+                                                        ]
+                                                    ),
+                                            border=ft.border.only(right=ft.border.BorderSide(1, "black"))
+                                        ),
+                                        ft.Container(
+                                            content=ft.Row(
+                                                        controls=[
+                                                            enddate_input,
+                                                            ft.IconButton(
+                                                                icon=ft.Icons.CALENDAR_MONTH,
+                                                                on_click=lambda e: page.open(end_date_picker)
+                                                            )
+                                                        ]
+                                                    ),
+                                           
+                                            
                                         )
                                     ],
                                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN
