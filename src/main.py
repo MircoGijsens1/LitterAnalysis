@@ -3,6 +3,7 @@ import os
 import json
 import shutil
 from flet import FilePickerUploadFile
+import datetime
 import asyncio
 
 
@@ -107,7 +108,7 @@ def main(page: ft.Page):
     )
         
     page.title = "Litter analysis"
-    page.appbar = ft.AppBar(
+    app_bar = ft.AppBar(
         title=ft.Text("Litter analysis"),
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         actions=[
@@ -123,7 +124,80 @@ def main(page: ft.Page):
             ),
         ],
     )
-    page.add(ft.Text("Body!"))
+
+    #Camera export view
+    def handle_change(e):
+        page.add(ft.Text(f"Date changed: {e.control.value.strftime('%m/%d/%Y')}"))
+
+    def handle_dismissal(e):
+        page.add(ft.Text(f"DatePicker dismissed"))
+
+    
+    start_date_picker = ft.DatePicker(
+            on_change=handle_change,
+            on_dismiss=handle_dismissal
+         )
+    end_date_picker = ft.DatePicker(            
+            on_change=handle_change,
+            on_dismiss=handle_dismissal
+        )                                        
+    camera_view = ft.View(
+        "/",
+        [
+            app_bar,
+            ft.Container(
+                content=ft.Text("Export camera results",
+                                size=40,
+                                weight=ft.FontWeight.BOLD),
+                alignment=ft.alignment.center
+            ),
+            ft.Container(
+                alignment=ft.alignment.top_center,
+                expand=True,
+                padding=ft.padding.only( top=40),
+                content= ft.Container(
+                        width=500, 
+                        content=ft.Column(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Column(
+                                            controls=[
+                                                ft.ElevatedButton(
+                                                    "Pick startdate",
+                                                    icon=ft.Icons.CALENDAR_MONTH,
+                                                    on_click=lambda e: page.open(start_date_picker)
+                                                )
+                                            ]
+                                        )
+                                    ],
+                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                                )
+                            ],
+                            tight=True,
+                            alignment=ft.MainAxisAlignment.START
+                        ),
+                        alignment=ft.alignment.top_center,
+                    )
+                )
+        ]
+    )
+    def route_change(route):
+        page.views.clear()
+        page.views.append(
+           camera_view
+        )
+        
+        page.update()
+
+    def view_pop(view):
+        page.views.pop()
+        top_view = page.views[-1]
+        page.go(top_view.route)
+
+    page.on_route_change = route_change
+    page.on_view_pop = view_pop
+    page.go(page.route)
 
 
 print(app_data_path)
