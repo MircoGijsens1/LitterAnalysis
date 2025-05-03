@@ -5,10 +5,32 @@ import shutil
 from flet import FilePickerUploadFile
 from datetime import datetime
 import asyncio
-
+from firebase_admin import credentials, initialize_app, delete_app, get_app, _apps
+from firebase_admin import firestore, storage
 
 app_data_path = os.getenv("FLET_APP_STORAGE_DATA")
 settings_path = os.path.join(app_data_path, "settings.json")
+
+db = None
+bucket = None
+
+def reinitialize_firebase(credential_path, bucket_name):
+    global db, bucket
+    try: 
+        if _apps:
+            delete_app(get_app())
+        
+        cred = credentials.Certificate(os.path.join(app_data_path, credential_path))
+        initialize_app(cred, {
+            "storageBucket": bucket_name
+        })
+        db = firestore.client()
+        bucket = storage.bucket()
+        print("Firebase re-initialized successfully.")
+    except Exception as e:
+        print("Firebase:", e)
+
+
 try:
     with open(settings_path, "r") as file:
         settings_data = json.load(file)
@@ -31,7 +53,7 @@ def main(page: ft.Page):
         content=ft.Text("Something went wrong", color=ft.Colors.RED),
         bgcolor=ft.Colors.ON_SURFACE_VARIANT
     )
-    async def show_error():
+    def show_error():
         page.open(error_message)
         page.update()
 
@@ -45,6 +67,13 @@ def main(page: ft.Page):
         else:
             selected_firebase_text.value = "No file selected."
         page.update()
+
+    def updateSettingsJson(settings):
+        try:
+            with open(settings_path, "w") as file:
+                json.dump(settings, file, indent=4)
+        except Exception as e:
+            show_error()
 
     def firebase_credentials_upload(e):
         try:
@@ -66,6 +95,11 @@ def main(page: ft.Page):
                     dst = os.path.join(app_data_path,settings_data["FirebaseCredentials"]["path"])
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy(src, dst)
+            if storage_bucket_input.value:
+                settings_data["FirebaseCredentials"]["StorageBucket"] = storage_bucket_input.value
+                updateSettingsJson(settings_data)
+
+            reinitialize_firebase(settings_data["FirebaseCredentials"]["path"], settings_data["FirebaseCredentials"]["StorageBucket"])
             show_success()
             page.close(firebase_settings)
         except Exception as e:
@@ -75,6 +109,7 @@ def main(page: ft.Page):
     selected_firebase_text = ft.Text("No file selected.")
     page.overlay.append(firebase_credentials_picker)
 
+    storage_bucket_input = ft.TextField(label="Storage bucket name", value=settings_data["FirebaseCredentials"]["StorageBucket"])
     firebase_settings = ft.AlertDialog(
         modal=True,
         title=ft.Text("Please upload the firebase credentials"),
@@ -82,7 +117,8 @@ def main(page: ft.Page):
             content=ft.Column([
                     ft.ElevatedButton("Choose file...",
                               on_click=lambda _: firebase_credentials_picker.pick_files(allow_multiple=False, allowed_extensions=["json"])),
-                    selected_firebase_text
+                    selected_firebase_text,
+                    storage_bucket_input
                 ], tight=True),
             width=300,
             height=120,

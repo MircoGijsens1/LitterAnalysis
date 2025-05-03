@@ -9,7 +9,8 @@
             "selected": "models/Classification/yolo11l-cls.pt"
         }
     },
-    "FirebaseCredentials":{
-        "path": "FirebaseCredentials/credentials.json"
+    "FirebaseCredentials": {
+        "path": "FirebaseCredentials/credentials.json",
+        "StorageBucket": "ai-recognition-floating-waste.firebasestorage.app"
     }
 }
