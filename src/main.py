@@ -126,21 +126,35 @@ def main(page: ft.Page):
     )
 
     #Camera export view
-    def handle_change(e):
-        page.add(ft.Text(f"Date changed: {e.control.value.strftime('%m/%d/%Y')}"))
+    def handle_startdate_change(e):
+        update_textfield_from_picker(e, startdate_input)
+        
 
-    def handle_dismissal(e):
+    def handle_startdate_dismissal(e):
         page.add(ft.Text(f"DatePicker dismissed"))
 
     
     start_date_picker = ft.DatePicker(
-            on_change=handle_change,
-            on_dismiss=handle_dismissal
+            on_change=handle_startdate_change,
+            on_dismiss=handle_startdate_dismissal
          )
+    page.overlay.append(start_date_picker)
+    startdate_input = ft.TextField(
+        label="Startdate",
+        hint_text="DD-MM-YYYY",
+        width=200
+    )
     end_date_picker = ft.DatePicker(            
-            on_change=handle_change,
-            on_dismiss=handle_dismissal
-        )                                        
+            on_change=handle_startdate_change,
+            on_dismiss=handle_startdate_dismissal
+        )
+    page.overlay.append(end_date_picker)        
+
+    def update_textfield_from_picker(e, textfield):
+        if e.control.value:
+            textfield.value = e.control.value.strftime('%d-%m-%Y')
+            page.update() 
+
     camera_view = ft.View(
         "/",
         [
@@ -161,10 +175,10 @@ def main(page: ft.Page):
                             controls=[
                                 ft.Row(
                                     controls=[
-                                        ft.Column(
+                                        ft.Row(
                                             controls=[
-                                                ft.ElevatedButton(
-                                                    "Pick startdate",
+                                                startdate_input,
+                                                ft.IconButton(
                                                     icon=ft.Icons.CALENDAR_MONTH,
                                                     on_click=lambda e: page.open(start_date_picker)
                                                 )
