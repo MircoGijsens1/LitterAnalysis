@@ -7,6 +7,13 @@ import asyncio
 
 
 app_data_path = os.getenv("FLET_APP_STORAGE_DATA")
+settings_path = os.path.join(app_data_path, "settings.json")
+try:
+    with open(settings_path, "r") as file:
+        settings_data = json.load(file)
+except Exception as e:
+    print("Failed to read JSON:", e)
+
 def main(page: ft.Page):
     sucess_message = ft.SnackBar(
         duration="3000",
@@ -47,7 +54,7 @@ def main(page: ft.Page):
                     upload_list.append(
                         FilePickerUploadFile(
                             firebase_credentials_picker.result.files[0].name,
-                            upload_url=page.get_upload_url("FirebaseCredentials/credentials.json", 600),
+                            upload_url=page.get_upload_url(settings_data["FirebaseCredentials"]["path"], 600),
                         )
                     )
                     firebase_credentials_picker.upload(upload_list)
@@ -55,7 +62,7 @@ def main(page: ft.Page):
                 if firebase_credentials_picker.result and firebase_credentials_picker.result.files:
                     selected_file = firebase_credentials_picker.result.files[0]
                     src = selected_file.path  # local file path
-                    dst = os.path.join(app_data_path, "FirebaseCredentials", "credentials.json")
+                    dst = os.path.join(app_data_path,settings_data["FirebaseCredentials"]["path"])
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy(src, dst)
             show_success()
