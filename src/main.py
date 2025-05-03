@@ -124,7 +124,7 @@ def main(page: ft.Page):
             ),
         ],
     )
-
+    export_path = None
     #Camera export view
     def update_textfield_from_picker(e, textfield):
         if e.control.value:
@@ -142,14 +142,19 @@ def main(page: ft.Page):
             date_input.error_text = "Invalid date format"
         page.update() 
 
-    def handle_startdate_change(e):
-        update_textfield_from_picker(e, startdate_input)
-        
+    def set_export_path(e):
+        export_path = e.path
+        export_folder_path.value = e.path
+        page.update() 
+        print(e.path)
 
-    def handle_startdate_dismissal(e):
-        page.add(ft.Text(f"DatePicker dismissed"))
+    #Funtions to do Firebase stuff
+    def export_from_firebase(e):
+        print(e)
 
-    
+    def delete_from_firebase(e):
+        print(e)
+
     start_date_picker = ft.DatePicker(
             on_change=lambda e: update_textfield_from_picker(e, startdate_input),
          )
@@ -170,8 +175,42 @@ def main(page: ft.Page):
         width=200,
         on_blur=lambda e: validate_date_input(enddate_input, end_date_picker),
     )
-    
+    export_firebase_button = ft.ElevatedButton(text="Export",width=200, bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE, on_click=export_from_firebase)
+    delete_firebase_button = ft.ElevatedButton(text="Delete", width=200 ,bgcolor=ft.Colors.RED,color=ft.Colors.WHITE, on_click=delete_from_firebase)
+    include_results = ft.Checkbox(label="Include results", value=True)
+    include_annotated_images = ft.Checkbox(label="Include annotated images", value=True)
+    include_normal_images = ft.Checkbox(label="Include original images", value=False)
+    firebase_export_folder_picker = ft.FilePicker(on_result=set_export_path)
+    page.overlay.append(firebase_export_folder_picker)
+    export_folder_path = ft.Text("No export folder selected.")
 
+    firebase_results_message = ft.Text("Getting results...")
+    firebase_results_progess_bar = ft.ProgressBar(width=500)
+    firebase_results_progress = ft.Column([firebase_results_message, firebase_results_progess_bar])
+
+    firebase_annotated_images_message = ft.Text("Getting annotated images...")
+    firebase_annotated_images_progess_bar = ft.ProgressBar(width=500)
+    firebase_annotated_progress = ft.Column([firebase_annotated_images_message, firebase_annotated_images_progess_bar])
+
+    firebase_original_images_message = ft.Text("Getting annotated images...")
+    firebase_original_images_progess_bar = ft.ProgressBar(width=500)
+    firebase_images_progress = ft.Column([firebase_original_images_message, firebase_original_images_progess_bar])
+
+    firebase_export_done = ft.Text("Export completed",weight=ft.FontWeight.BOLD, visible=False)
+
+    progress_container = ft.Container(
+                            expand=True,
+                            visible=False,
+                            alignment=ft.alignment.center,
+                            padding=ft.padding.only( top=40),
+                            content= ft.Container(
+                                content=ft.Column(
+                                    controls=[firebase_results_progress, firebase_annotated_progress, firebase_images_progress, firebase_export_done]
+
+                                ),
+                                width=500)
+                            )
+    
     camera_view = ft.View(
         "/",
         [
@@ -187,7 +226,7 @@ def main(page: ft.Page):
                 expand=True,
                 padding=ft.padding.only( top=40),
                 content= ft.Container(
-                        width=800, 
+                        width=500, 
                         content=ft.Column(
                             controls=[
                                 ft.Row(
@@ -202,7 +241,6 @@ def main(page: ft.Page):
                                                             )
                                                         ]
                                                     ),
-                                            border=ft.border.only(right=ft.border.BorderSide(1, "black"))
                                         ),
                                         ft.Container(
                                             content=ft.Row(
@@ -219,22 +257,40 @@ def main(page: ft.Page):
                                         )
                                     ],
                                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                                ),
+                                ft.Row(
+                                    controls=[include_results,include_annotated_images, include_normal_images],
+                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                    
+                                ),
+                                ft.Row(
+                                    controls=[ 
+                                        ft.ElevatedButton("Choose file...",
+                                            on_click=lambda _: firebase_export_folder_picker.get_directory_path(dialog_title="Result export location" )), export_folder_path],
+                                    
+                                ),
+                                ft.Row(
+                                    controls=[delete_firebase_button, export_firebase_button],
+                                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                                    
                                 )
+
                             ],
+                            spacing=30,
                             tight=True,
                             alignment=ft.MainAxisAlignment.START
                         ),
                         alignment=ft.alignment.top_center,
                     )
-                )
+                ),
+            progress_container
         ]
     )
     def route_change(route):
         page.views.clear()
         page.views.append(
            camera_view
-        )
-        
+        )        
         page.update()
 
     def view_pop(view):
