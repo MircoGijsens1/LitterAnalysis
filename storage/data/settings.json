@@ -1,0 +1,15 @@
+{
+    "models": {
+        "ObjectDetection": {
+            "default": "models/ObjectDetection/yolo11l.pt",
+            "selected": "models/ObjectDetection/yolo11l.pt"
+        },
+        "Classification": {
+            "default": "models/Classification/yolo11l-cls.pt",
+            "selected": "models/Classification/yolo11l-cls.pt"
+        }
+    },
+    "FirebaseCredentials":{
+        "path": "FirebaseCredentials/credentials.json"
+    }
+}
