@@ -194,12 +194,22 @@ def main(page: ft.Page):
 
     #Funtions to do Firebase stuff
     def export_from_firebase(e):
-        startDate =  startdate_input.value
-        endDate = enddate_input.value
+        startDate =  startdate_input.value.strip()
+        endDate = enddate_input.value.strip()
         includeResults =  include_results.value
         includeAnnotatedImages =  include_annotated_images.value
         includeOriginalImages =  include_normal_images.value
-        exportFolder = export_folder_path.value
+        exportFolder = export_folder_path.value.strip()
+        if not startDate or not endDate:
+            show_error("Start and end date are required!")
+            return
+
+        if exportFolder == "No export folder selected.":
+            show_error("Please select an export folder.")
+            return
+        if includeResults == False and includeAnnotatedImages == False and includeOriginalImages == False:
+            show_error("Please select what to include in the export.")
+            return
         page.run_task(get_data_from_firestore_and_storage, startDate, endDate, includeResults, includeAnnotatedImages, includeOriginalImages, exportFolder)
 
     async def get_firestore_results_to_excel(startDate, endDate, exportFolder):
@@ -247,7 +257,7 @@ def main(page: ft.Page):
         except Exception as e:
             print(e)
             show_error(e)
-        print("test")
+
     async def get_data_from_firestore_and_storage(startDate, endDate, includeResults, includeAnnotatedImages, includeOriginalImages, exportFolder):
         progress_container.visible = True
         firebase_results_progress.visible = False
@@ -261,13 +271,71 @@ def main(page: ft.Page):
             tasks.append(get_firestore_results_to_excel(startDate, endDate, export_created_folder))
 
         await asyncio.gather(*tasks)
-        firebase_export_done.visible = True    
+        firebase_export_done.visible = True  
+        firebase_export_done.value = f"The export is complete. You can find your files here: {export_created_folder}"
+        page.update() 
+    
+    async def delete_firestore_results(startDate, endDate):
+        firebase_results_progress.visible = True
+        firebase_results_progess_bar.value = None
+        firebase_results_message.value = "Deleting results..."
+        page.update()
+        try:
+            data_count = 0
+            batch = db.batch()
+            async for col in db.collections():
+                    if col.id.endswith("objects"):
+                        start_date = datetime.strptime(startDate, "%d-%m-%Y").replace(tzinfo=timezone.utc)
+                        end_date = datetime.strptime(endDate, "%d-%m-%Y").replace(tzinfo=timezone.utc) + timedelta(days=1)
+                        async for document in db.collection(col.id).where("end_timestamp", ">=", start_date).where("end_timestamp", "<", end_date).stream():
+                            batch.delete(document.reference)
+                            data_count += 1
+                            if data_count % 500 == 0:
+                                await batch.commit() 
+                                firebase_results_message.value = f"Deleted {data_count} objects"
+                                page.update()
+                                batch = db.batch()
+
+            if data_count % 500 != 0:
+                await batch.commit() 
+            firebase_results_message.value = f"Deleting results complete"
+            firebase_results_progess_bar.value = 1.0
+            page.update()
+
+        except Exception as e:
+            print(e)
+            show_error(e)
 
 
+    async def delete_data_from_firestore_and_storage(startDate, endDate, includeResults, includeAnnotatedImages, includeOriginalImages, exportFolder):
+        progress_container.visible = True
+        firebase_results_progress.visible = False
+        firebase_images_progress.visible = False
+        firebase_annotated_progress.visible = False
+        page.update()  
+        tasks = []
+        if includeResults:
+            tasks.append(delete_firestore_results(startDate, endDate))
+
+        await asyncio.gather(*tasks)
+        firebase_export_done.visible = True  
+        firebase_export_done.value = f"The data is deleted from firebase"
+        page.update() 
 
 
     def delete_from_firebase(e):
-        print(e)
+        startDate =  startdate_input.value.strip()
+        endDate = enddate_input.value.strip()
+        includeResults =  include_results.value
+        includeAnnotatedImages =  include_annotated_images.value
+        includeOriginalImages =  include_normal_images.value
+        if not startDate or not endDate:
+            show_error("Start and end date are required!")
+            return
+        if includeResults == False and includeAnnotatedImages == False and includeOriginalImages == False:
+            show_error("Please select what to include in the export.")
+            return
+        page.run_task(delete_data_from_firestore_and_storage, startDate, endDate, includeResults, includeAnnotatedImages, includeOriginalImages)
 
     start_date_picker = ft.DatePicker(
             on_change=lambda e: update_textfield_from_picker(e, startdate_input),
