@@ -3,10 +3,11 @@ import os
 import json
 import shutil
 from flet import FilePickerUploadFile
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import asyncio
 from firebase_admin import credentials, initialize_app, delete_app, get_app, _apps
-from firebase_admin import firestore, storage
+from firebase_admin import firestore, storage, firestore_async
+import pandas as pd
 
 app_data_path = os.getenv("FLET_APP_STORAGE_DATA")
 settings_path = os.path.join(app_data_path, "settings.json")
@@ -24,7 +25,7 @@ def reinitialize_firebase(credential_path, bucket_name):
         initialize_app(cred, {
             "storageBucket": bucket_name
         })
-        db = firestore.client()
+        db = firestore_async.client()
         bucket = storage.bucket()
         print("Firebase re-initialized successfully.")
     except Exception as e:
@@ -37,6 +38,12 @@ try:
 except Exception as e:
     print("Failed to read JSON:", e)
 
+if os.path.exists(os.path.join(app_data_path,settings_data["FirebaseCredentials"]["path"])) and settings_data["FirebaseCredentials"]["StorageBucket"]:
+    reinitialize_firebase(settings_data["FirebaseCredentials"]["path"], settings_data["FirebaseCredentials"]["StorageBucket"])
+else:
+    print("File not found.")
+
+
 def main(page: ft.Page):
     sucess_message = ft.SnackBar(
         duration="3000",
@@ -47,13 +54,14 @@ def main(page: ft.Page):
         page.open(sucess_message)
         page.update()
         
-
+    error_text = ft.Text("Something went wrong", color=ft.Colors.RED)
     error_message = ft.SnackBar(
         duration="3000",
-        content=ft.Text("Something went wrong", color=ft.Colors.RED),
+        content=error_text,
         bgcolor=ft.Colors.ON_SURFACE_VARIANT
     )
-    def show_error():
+    def show_error(e="Something went wrong"):
+        error_text.value = e
         page.open(error_message)
         page.update()
 
@@ -160,7 +168,7 @@ def main(page: ft.Page):
             ),
         ],
     )
-    export_path = None
+    
     #Camera export view
     def update_textfield_from_picker(e, textfield):
         if e.control.value:
@@ -178,15 +186,85 @@ def main(page: ft.Page):
             date_input.error_text = "Invalid date format"
         page.update() 
 
+    
     def set_export_path(e):
-        export_path = e.path
         export_folder_path.value = e.path
         page.update() 
         print(e.path)
 
     #Funtions to do Firebase stuff
     def export_from_firebase(e):
-        print(e)
+        startDate =  startdate_input.value
+        endDate = enddate_input.value
+        includeResults =  include_results.value
+        includeAnnotatedImages =  include_annotated_images.value
+        includeOriginalImages =  include_normal_images.value
+        exportFolder = export_folder_path.value
+        page.run_task(get_data_from_firestore_and_storage, startDate, endDate, includeResults, includeAnnotatedImages, includeOriginalImages, exportFolder)
+
+    async def get_firestore_results_to_excel(startDate, endDate, exportFolder):
+        firebase_results_progress.visible = True
+        firebase_results_progess_bar.value = None
+        firebase_results_message.value = "Getting results..."
+        page.update()
+        try:
+            data = []
+            data_count = 0
+            async for col in db.collections():
+                    if col.id.endswith("objects"):
+                        start_date = datetime.strptime(startDate, "%d-%m-%Y").replace(tzinfo=timezone.utc)
+                        end_date = datetime.strptime(endDate, "%d-%m-%Y").replace(tzinfo=timezone.utc) + timedelta(days=1)
+                        async for document in db.collection(col.id).where("end_timestamp", ">=", start_date).where("end_timestamp", "<", end_date).stream():
+                            doc_dict = document.to_dict()
+                            doc_dict["Date"] = doc_dict["end_timestamp"].date()
+                            data.append(doc_dict)
+                            data_count += 1
+                            firebase_results_message.value = f"Fetched {data_count} objects"
+                            page.update()
+            if data.count == 0:
+                firebase_results_message.value = f"No Objects present"
+                return
+            firebase_results_message.value = f"Preparing for export to excel"
+            page.update()
+            results_df = pd.DataFrame(data)  
+            results_df = results_df.groupby(["Date", "cls_name", "direction_y"]).size().reset_index(name="Total")
+            results_df = results_df.rename(columns={"cls_name": "Type", "direction_y": "Direction"})
+            total_row = {
+                "Date": "",  # or empty string ""
+                "Type": "",
+                "Direction": "",
+                "Total": results_df["Total"].sum()
+            }
+
+            results_df = pd.concat([results_df, pd.DataFrame([total_row])], ignore_index=True)
+            firebase_results_message.value = f"Exporting to excel"
+            page.update()
+            results_df.to_excel(os.path.join(exportFolder, f"{startDate}_{endDate}.xlsx"), index=False)
+            firebase_results_message.value = f"Exporting results complete"
+            firebase_results_progess_bar.value = 1.0
+            page.update()
+
+        except Exception as e:
+            print(e)
+            show_error(e)
+        print("test")
+    async def get_data_from_firestore_and_storage(startDate, endDate, includeResults, includeAnnotatedImages, includeOriginalImages, exportFolder):
+        progress_container.visible = True
+        firebase_results_progress.visible = False
+        firebase_images_progress.visible = False
+        firebase_annotated_progress.visible = False
+        page.update()  
+        export_created_folder = os.path.join(exportFolder, f"export_{startDate}_{endDate}")
+        os.makedirs(export_created_folder, exist_ok=True)
+        tasks = []
+        if includeResults:
+            tasks.append(get_firestore_results_to_excel(startDate, endDate, export_created_folder))
+
+        await asyncio.gather(*tasks)
+        firebase_export_done.visible = True    
+
+
+
 
     def delete_from_firebase(e):
         print(e)
@@ -228,7 +306,7 @@ def main(page: ft.Page):
     firebase_annotated_images_progess_bar = ft.ProgressBar(width=500)
     firebase_annotated_progress = ft.Column([firebase_annotated_images_message, firebase_annotated_images_progess_bar])
 
-    firebase_original_images_message = ft.Text("Getting annotated images...")
+    firebase_original_images_message = ft.Text("Getting original images...")
     firebase_original_images_progess_bar = ft.ProgressBar(width=500)
     firebase_images_progress = ft.Column([firebase_original_images_message, firebase_original_images_progess_bar])
 
