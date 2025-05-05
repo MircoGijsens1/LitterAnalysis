@@ -364,20 +364,16 @@ def main(page: ft.Page):
                 firebase_original_images_message.value = "Getting annotated images..."
             page.update()
             startDate = datetime.strptime(startDate, "%d-%m-%Y")
-            print(startDate)
             endDate = datetime.strptime(endDate, "%d-%m-%Y")
-            print(endDate)
             date_list = [
                 (startDate + timedelta(days=i)).strftime("%d-%m-%Y")
                     for i in range((endDate - startDate).days + 1)
             ]
-            print(date_list)
             grouped_list = defaultdict(list)
             for date_str in date_list:   
                 for blob in gcs_bucket.list_blobs(match_glob=f"**/{type}/{date_str}/*.*"):
                     folder= blob.name.rsplit("/", 3)[0]
                     grouped_list[folder].append(blob.name.removeprefix(f'{folder}/'))
-            print(grouped_list)
             for folder, blob_list in grouped_list.items():
                 download_many_blobs_with_transfer_manager(type, "", "",folder, blob_list, exportFolder)
             if type == "AnnotatedImages":
