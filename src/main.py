@@ -11,6 +11,9 @@ from google.cloud.storage import Client, transfer_manager
 from google.oauth2 import service_account
 import pandas as pd
 from collections import defaultdict
+from pathlib import Path
+from ultralytics import YOLO
+import cv2
 
 app_data_path = os.getenv("FLET_APP_STORAGE_DATA")
 settings_path = os.path.join(app_data_path, "settings.json")
@@ -168,6 +171,8 @@ def main(page: ft.Page):
         title=ft.Text("Litter analysis"),
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         actions=[
+            ft.TextButton("Export camera results", on_click=lambda _: page.go("/")),
+            ft.TextButton("Brand analysis", on_click=lambda _: page.go("/analysis")),
             ft.PopupMenuButton(
                 content= ft.Container(
                             content=ft.Text("Settings"),
@@ -496,10 +501,203 @@ def main(page: ft.Page):
                                 width=500)
                             )
     
+    #Brand AUDIT
+
+    def set_audit_export_path(e):
+        audit_export_folder_path.value = e.path
+        page.update() 
+    audit_export_folder_picker = ft.FilePicker(on_result=set_audit_export_path)
+    page.overlay.append(audit_export_folder_picker)
+    audit_export_folder_path = ft.Text("No export folder selected.")
+
+    def set_audit_import_path(e):
+        audit_import_folder_path.value = e.path
+        page.update() 
+    audit_import_folder_picker = ft.FilePicker(on_result=set_audit_import_path)
+    page.overlay.append(audit_import_folder_picker)
+    audit_import_folder_path = ft.Text("No brand audit folder selected.")
+
+
+    brand_images_message = ft.Text("Analyzing images...")
+    brand_progess_bar = ft.ProgressBar(width=500)
+    brand_progress = ft.Column([brand_images_message, brand_progess_bar])
+
+    brand_done = ft.Text("Export completed",weight=ft.FontWeight.BOLD, visible=False)
+
+    progress_container_brand = ft.Container(
+                            expand=True,
+                            visible=False,
+                            alignment=ft.alignment.center,
+                            padding=ft.padding.only( top=40),
+                            content= ft.Container(
+                                content=ft.Column(
+                                    controls=[brand_progress, brand_done]
+
+                                ),
+                                width=500)
+                            )
+    
+    def run_classification(image, classification_model):
+        result = classification_model(image, imgsz=224, verbose=False)[0]
+        if result.probs is not None:
+            #result.show()
+            return result.names[int(result.probs.top1)],  [result.names[i] for i in result.probs.top5], result.probs.top5conf.cpu().numpy()
+        else:
+            return "unknown", [None, None, None, None, None], [None, None, None, None, None]
+
+    def analyze_images(auditFolder, exportFolder):
+        progress_container_brand.visible = True
+        brand_done.visible = False
+        brand_progress.visible = True
+        brand_progess_bar.value = None
+        brand_images_message.value = "Initialising models..."
+        page.update()
+        detection_model_path = settings_data["models"]["ObjectDetection"]["selected"]
+        detection_model_standard_path = settings_data["models"]["ObjectDetection"]["default"]
+        if detection_model_path and os.path.exists(os.path.join(app_data_path,detection_model_path)):
+            detection_model = YOLO(os.path.join(app_data_path,detection_model_path))
+        elif detection_model_standard_path and os.path.exists(os.path.join(app_data_path,detection_model_standard_path)):
+            detection_model = YOLO(os.path.join(app_data_path,detection_model_standard_path))
+        else:
+            brand_progess_bar.value = 0
+            brand_images_message.value = "No detection models present!"
+            page.update()
+            return
+        
+        classification_model_path = settings_data["models"]["Classification"]["selected"]
+        classification_model_standard_path = settings_data["models"]["Classification"]["default"]
+        if classification_model_path and os.path.exists(os.path.join(app_data_path,detection_model_path)):
+            classification_model = YOLO(os.path.join(app_data_path,classification_model_path))
+        elif classification_model_standard_path and os.path.exists(os.path.join(app_data_path,detection_model_standard_path)):
+            classification_model = YOLO(os.path.join(app_data_path,classification_model_standard_path))
+        else:
+            brand_progess_bar.value = 0
+            brand_images_message.value = "No classification models present!"
+            page.update()
+            return
+
+        exts = ['.jpg', '.png', ".jpeg"]
+        auditFolder = Path(auditFolder)
+        exportFolder = Path(exportFolder)
+        datename = datetime.today().strftime("%d-%m-%Y")
+        exportFolder = os.path.join(exportFolder ,f"Brand_audit_{datename}")
+        image_paths = [path for path in auditFolder.rglob('*') if path.suffix.lower() in exts]
+        total_items = len(image_paths)
+        item_count = 0
+        detection_results = detection_model(image_paths, stream=True, batch=4, show_labels=False, imgsz=1024, conf=0.20, verbose=False)
+        results_list = []
+        top5List = []
+        brand_progess_bar.value = 0
+        brand_images_message.value = f"Analysing {total_items} images..."
+        page.update()
+        for result in detection_results:
+            try:
+                if result is not None:
+                    annotated_image = result.plot(labels=False, conf=False)
+                    image = Path(result.path)
+                    relative_parent = image.parent.relative_to(auditFolder)
+                    destination_folder = os.path.join(exportFolder, "images",relative_parent)
+                    os.makedirs(destination_folder, exist_ok=True)
+                    shutil.copy2(result.path, os.path.join(destination_folder ,image.name))
+                    for idx,((x1, y1, x2, y2), cls) in enumerate(zip(result.boxes.xyxy.cpu().numpy(), result.boxes.cls.cpu().numpy())):
+                            x1, y1, x2, y2 = map(lambda v: int(round(v)), [x1, y1, x2, y2])
+                            cropped_image = result.orig_img[y1:y2,x1:x2]
+                            brand, top5, top5conf = run_classification(cropped_image, classification_model)  
+                            label = f"{idx} - {result.names[int(cls)]} - {brand}"
+                            font = cv2.FONT_HERSHEY_SIMPLEX
+                            font_scale = 0.5
+                            thickness = 1
+                
+                            # Measure text size
+                            (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+                            
+                            # Adjust y position to avoid going off the top
+                            label_y = max(y1 - text_height - baseline - 4, 0)
+                            
+                            # Draw filled background rectangle behind text
+                            top_left = (x1, label_y)
+                            bottom_right = (x1 + text_width + 1, label_y + text_height + baseline + 2)
+                            
+                            cv2.rectangle(annotated_image, top_left, bottom_right, (255, 255, 255), -1)
+                            
+                            # Put text (slightly inside the box to avoid touching the top)
+                            cv2.putText(annotated_image, label, (x1, label_y + text_height), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+                            results_list.append({
+                                    'id': idx,
+                                    'Image folder': str(relative_parent).replace("\\", "/"),
+                                    'image_name': image.name,
+                                    'Waste Type': result.names[int(cls)],
+                                    'Brand': brand,
+                                    'Box': (x1, y1, x2, y2),
+                                    'original_img_path': str(image).replace("\\", "/")
+                            })
+                            top5_fields = {}
+                            for i, (brand, conf) in enumerate(zip(top5, top5conf)):
+                                top5_fields[f'Brand {i + 1}'] = brand
+                                top5_fields[f'conf {i+1}'] = conf
+                            top5List.append({
+                                    'Image folder': str(relative_parent).replace("\\", "/"),
+                                    'Image': image.name,
+                                    'Object ID': idx,
+                                    'Waste Type': result.names[int(cls)],
+                                    **top5_fields,
+                                    'original_img_path': str(image).replace("\\", "/")
+                            })
+                    destination_annotated_folder = os.path.join(exportFolder, "annotated",relative_parent)
+                    os.makedirs(destination_annotated_folder, exist_ok=True)
+                    cv2.imwrite(os.path.join(destination_annotated_folder ,image.name), annotated_image)
+            except Exception as e:
+                print(f"Something went wrong: {e}")
+            item_count += 1
+            brand_images_message.value = f"Analysed {item_count} images"                               
+            brand_progess_bar.value = item_count / total_items
+            page.update()
+        
+        brand_images_message.value = f"Summarizing {item_count} images"
+        brand_progess_bar.value = None
+        page.update()
+        results_df = pd.DataFrame(results_list)
+        grouped = results_df.groupby(["Image folder", "Waste Type", "Brand"]).agg(
+            Total=('id', 'size'),
+            Images=('image_name', lambda x: list(set(x.dropna())))
+        ).reset_index()
+        grouped = grouped.sort_values(by='Image folder')
+        top5_df = pd.DataFrame(top5List)
+        excel_name  = os.path.join(exportFolder,f"Brand_audit_{datename}.xlsx")
+        with pd.ExcelWriter(excel_name, engine='openpyxl') as writer:
+            grouped.to_excel(writer, sheet_name='Brand audit', index=False)
+            top5_df.to_excel(writer, sheet_name='Brands conf', index=False)
+
+        brand_images_message.value = f"Summarized {item_count} images"
+        brand_progess_bar.value = 1
+        brand_done.value = f"You can find the export here: {exportFolder}"
+        brand_done.visible = True
+        page.update()
+        
+    async def start_analysis(auditFolder, exportFolder):
+        await asyncio.to_thread(analyze_images, auditFolder, exportFolder)
+
+    def analyse_brand_audit(e):
+        exportFolder = audit_export_folder_path.value.strip()
+        auditFolder = audit_import_folder_path.value.strip()
+        if exportFolder == "No export folder selected.":
+            show_error("Please select an export folder.")
+            return
+        if auditFolder == "No brand audit folder selected.":
+            show_error("Please select a brand audit folder.")
+            return
+        page.run_task(start_analysis, auditFolder, exportFolder)
+
+
+    analyse_brand_button = ft.ElevatedButton(text="Analyse brand audit", width=200, bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE, on_click=analyse_brand_audit)
+
+
     camera_view = ft.View(
         "/",
+        appbar= app_bar,
+        controls=
         [
-            app_bar,
+            
             ft.Container(
                 content=ft.Text("Export camera results",
                                 size=40,
@@ -571,11 +769,63 @@ def main(page: ft.Page):
             progress_container
         ]
     )
+    analysis_view = ft.View("/analysis", 
+                            appbar= app_bar,
+                            controls=
+                            [         
+                                app_bar,  
+                                ft.Container(
+                                    content=ft.Text("Brand Analysis",
+                                                    size=40,
+                                                    weight=ft.FontWeight.BOLD),
+                                    alignment=ft.alignment.center
+                                ),
+                                ft.Container(
+                                    alignment=ft.alignment.top_center,
+                                    expand=True,
+                                    padding=ft.padding.only( top=40),
+                                    content= ft.Container(
+                                            width=500, 
+                                            content=ft.Column(
+                                                controls=[
+                                                    ft.Text("Brandaudit folder", weight=ft.FontWeight.BOLD,),
+                                                    ft.Row(
+                                                        controls=[ 
+                                                            ft.ElevatedButton("Choose file...",
+                                                                on_click=lambda _: audit_import_folder_picker.get_directory_path(dialog_title="Brand audit location" )), audit_import_folder_path],
+                                                        
+                                                        ),
+                                                        ft.Text("Export folder", weight=ft.FontWeight.BOLD,),
+                                                        ft.Row(
+                                                        controls=[ 
+                                                            ft.ElevatedButton("Choose file...",
+                                                                on_click=lambda _: audit_export_folder_picker.get_directory_path(dialog_title="Brand audit export location" )), audit_export_folder_path],
+                                                        
+                                                        ),
+                                                        ft.Row(
+                                                            controls=[analyse_brand_button]
+                                                            
+                                                        )
+                                                    ],
+                                                    spacing=30
+                                                )
+                                            )
+                                 )
+                                ,progress_container_brand
+                            ]
+    )
     def route_change(route):
+        print("test")
         page.views.clear()
-        page.views.append(
+           
+        if page.route == "/analysis":
+            page.views.append(
+                analysis_view
+            ) 
+        else:
+             page.views.append(
            camera_view
-        )        
+        )    
         page.update()
 
     def view_pop(view):

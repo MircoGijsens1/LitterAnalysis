@@ -11,6 +11,6 @@
     },
     "FirebaseCredentials": {
         "path": "FirebaseCredentials/credentials.json",
-        "StorageBucket": "essential-truth-451001-i2.firebasestorage.app"
+        "StorageBucket": "ai-recognition-floating-waste.firebasestorage.app"
     }
 }
