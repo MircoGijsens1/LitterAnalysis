@@ -612,7 +612,7 @@ def main(page: ft.Page):
                                 brand, top5, top5conf = run_classification(cropped_image, classification_model)  
                                 label = f"{idx} - {result.names[int(cls)]} - {brand}"
                                 font = cv2.FONT_HERSHEY_SIMPLEX
-                                font_scale = 0.5
+                                font_scale = 1 #result.orig_shape[1] / 1000.0 
                                 thickness = 1
                     
                                 # Measure text size
