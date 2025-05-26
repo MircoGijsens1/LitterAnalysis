@@ -2,12 +2,13 @@
     "models": {
         "ObjectDetection": {
             "default": "models/ObjectDetection/yolo11l.pt",
-            "selected": "models/ObjectDetection/yolo11l.pt"
+            "selected": "models/ObjectDetection/train_1024 with aug.pt"
         },
         "Classification": {
             "default": "models/Classification/yolo11l-cls.pt",
-            "selected": "models/Classification/yolo11l-cls.pt"
-        }
+            "selected": "models/Classification/brand_audit_brands_cropped_m150_aug_res_95.pt"
+        },
+        "batch_size": 5
     },
     "FirebaseCredentials": {
         "path": "FirebaseCredentials/credentials.json",
