@@ -12,6 +12,6 @@
     },
     "FirebaseCredentials": {
         "path": "FirebaseCredentials/credentials.json",
-        "StorageBucket": "ai-recognition-floating-waste.firebasestorage.app"
+        "StorageBucket": ""
     }
 }
