@@ -15,6 +15,7 @@ from pathlib import Path
 from ultralytics import YOLO
 import cv2
 import types
+from itertools import islice
 
 app_data_path = os.getenv("FLET_APP_STORAGE_DATA")
 settings_path = os.path.join(app_data_path, "settings.json")
@@ -293,6 +294,7 @@ def main(page: ft.Page):
         firebase_images_progress.visible = False
         firebase_annotated_progress.visible = False
         firebase_export_done.visible = False  
+        firebase_metadata_progress.visible = False
         page.update()  
         export_created_folder = os.path.join(exportFolder, f"export_{startDate}_{endDate}")
         os.makedirs(export_created_folder, exist_ok=True)
@@ -342,17 +344,121 @@ def main(page: ft.Page):
             print(e)
             show_error(e)
 
+    async def delete_firestore_metadata(startDate, endDate):
+        firebase_metadata_progress.visible = True
+        firebase_metadata_progess_bar.value = None
+        firebase_metadata_message.value = "Deleting metadata..."
+        page.update()
+        try:
+            data_count = 0
+            batch = db.batch()
+            async for col in db.collections():
+                    if col.id.endswith("Images"):
+                        start_date = datetime.strptime(startDate, "%d-%m-%Y").replace(tzinfo=timezone.utc)
+                        end_date = datetime.strptime(endDate, "%d-%m-%Y").replace(tzinfo=timezone.utc) + timedelta(days=1)
+                        async for document in db.collection(col.id).where("timestamp", ">=", start_date).where("timestamp", "<", end_date).stream():
+                            batch.delete(document.reference)
+                            data_count += 1
+                            if data_count % 500 == 0:
+                                await batch.commit() 
+                                firebase_results_message.value = f"Deleted {data_count} metadata objects"
+                                page.update()
+                                batch = db.batch()
 
-    async def delete_data_from_firestore_and_storage(startDate, endDate, includeResults, includeAnnotatedImages, includeOriginalImages, exportFolder):
+            if data_count % 500 != 0:
+                await batch.commit() 
+            firebase_metadata_message.value = f"Deleting metadata complete"
+            firebase_metadata_progess_bar.value = 1.0
+            page.update()
+
+        except Exception as e:
+            print(e)
+            show_error(e)
+
+
+    def batched(iterable, batch_size):
+        """
+        Generator that yields items from iterable in batches of size batch_size.
+        """
+        iterator = iter(iterable)
+        while True:
+            batch = list(islice(iterator, batch_size))
+            if not batch:
+                break
+            yield batch
+
+    def delete_images_from_storage(startDate, endDate, type ):
+        try:
+            if type == "AnnotatedImages":
+                firebase_annotated_progress.visible = True
+                firebase_annotated_images_progess_bar.value = None
+                firebase_annotated_images_message.value = "Deleting annotated images..."
+            else:
+                firebase_images_progress.visible = True
+                firebase_original_images_progess_bar.value = None
+                firebase_original_images_message.value = "Deleting annotated images..."
+            page.update()
+            startDate = datetime.strptime(startDate, "%d-%m-%Y")
+            endDate = datetime.strptime(endDate, "%d-%m-%Y")
+            date_list = [
+                (startDate + timedelta(days=i)).strftime("%d-%m-%Y")
+                    for i in range((endDate - startDate).days + 1)
+            ]
+            total_deleted = 0
+            for date_str in date_list:
+                blob_iterator = gcs_bucket.list_blobs(match_glob=f"**/{type}/{date_str}/*.*") 
+                for batch in batched(blob_iterator, 100):  # 100 = max GCS batch limit
+                    with gcs_client.batch():
+                        for blob in batch:
+                            blob.delete()
+                    total_deleted += len(batch)
+                    if type == "AnnotatedImages":
+                        firebase_annotated_images_message.value = f"Deleted {total_deleted} annotated images"
+                    else:
+                        firebase_original_images_message.value = f"Deleted {total_deleted} images"
+                    page.update()
+
+            if type == "AnnotatedImages":
+                firebase_annotated_progress.visible = True
+                firebase_annotated_images_progess_bar.value = 1.0
+                firebase_annotated_images_message.value = "Deleting Annotated images complete"
+            else:
+                firebase_images_progress.visible = True
+                firebase_original_images_progess_bar.value = 1.0
+                firebase_original_images_message.value = "Deleting Images complete"
+            page.update()
+        except Exception as e:
+            print("GCS access error:", e)
+            if type == "AnnotatedImages":
+                firebase_annotated_progress.visible = True
+                firebase_annotated_images_progess_bar.value = 0.0
+                firebase_annotated_images_message.value = "Something went wrong with the annotated images"
+            else:
+                firebase_images_progress.visible = True
+                firebase_original_images_progess_bar.value = 0.0
+                firebase_original_images_message.value = "Something went wrong with the images"
+            page.update()
+
+    async def delete_data_from_firestore_and_storage(startDate, endDate, includeResults, includeAnnotatedImages, includeOriginalImages):
         progress_container.visible = True
         firebase_results_progress.visible = False
         firebase_images_progress.visible = False
         firebase_annotated_progress.visible = False
+        firebase_metadata_progress.visible = False
         page.update()  
         tasks = []
         if includeResults:
             tasks.append(delete_firestore_results(startDate, endDate))
 
+        if includeAnnotatedImages:
+            tasks.append(asyncio.to_thread(delete_images_from_storage,startDate, endDate, "AnnotatedImages"))
+
+        if includeOriginalImages:
+            tasks.append(asyncio.to_thread(delete_images_from_storage,startDate, endDate, "Images"))
+        
+        if includeAnnotatedImages:
+             tasks.append(delete_firestore_metadata(startDate, endDate))
+        
         await asyncio.gather(*tasks)
         firebase_export_done.visible = True  
         firebase_export_done.value = f"The data is deleted from firebase"
@@ -488,6 +594,10 @@ def main(page: ft.Page):
     firebase_original_images_progess_bar = ft.ProgressBar(width=500)
     firebase_images_progress = ft.Column([firebase_original_images_message, firebase_original_images_progess_bar])
 
+    firebase_metadata_message = ft.Text("Removing metadata...")
+    firebase_metadata_progess_bar = ft.ProgressBar(width=500)
+    firebase_metadata_progress = ft.Column([firebase_metadata_message, firebase_metadata_progess_bar])
+
     firebase_export_done = ft.Text("Export completed",weight=ft.FontWeight.BOLD, visible=False)
 
     progress_container = ft.Container(
@@ -497,7 +607,7 @@ def main(page: ft.Page):
                             padding=ft.padding.only( top=40),
                             content= ft.Container(
                                 content=ft.Column(
-                                    controls=[firebase_results_progress, firebase_annotated_progress, firebase_images_progress, firebase_export_done]
+                                    controls=[firebase_results_progress, firebase_annotated_progress, firebase_images_progress, firebase_metadata_progress, firebase_export_done]
 
                                 ),
                                 width=500)

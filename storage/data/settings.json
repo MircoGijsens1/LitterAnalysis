@@ -12,6 +12,6 @@
     },
     "FirebaseCredentials": {
         "path": "FirebaseCredentials/credentials.json",
-        "StorageBucket": ""
+        "StorageBucket": "essential-truth-451001-i2.firebasestorage.app"
     }
 }
