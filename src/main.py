@@ -157,13 +157,266 @@ def main(page: ft.Page):
         actions_alignment=ft.MainAxisAlignment.END,
         on_dismiss=lambda e: print("Modal dialog dismissed!"),
     )
+    def object_detection_result(e: ft.FilePickerResultEvent):
+        print("Selected files:", e.files)
+        print("Selected file or directory:", e.path)
+        if e.files:
+            # Show first file's name
+            selected_name = e.files[0].name
+        elif e.path:
+            # Folder selected — get folder name from path
+            selected_name = os.path.basename(e.path.rstrip("/\\"))
+        else:
+            selected_name = "No file or folder selected."
+        selected_object_detection_text.value = f"Selected: {selected_name}"
+        page.update()
+    
+    def object_classification_result(e: ft.FilePickerResultEvent):
+        print("Selected files:", e.files)
+        print("Selected file or directory:", e.path)
+        if e.files:
+            # Show first file's name
+            selected_name = e.files[0].name
+        elif e.path:
+            # Folder selected — get folder name from path
+            selected_name = os.path.basename(e.path.rstrip("/\\"))
+        else:
+            selected_name = "No file or folder selected."
+        selected_classification_text.value = f"Selected: {selected_name}"
+        page.update()
+
+    object_detection_picker = ft.FilePicker(on_result=object_detection_result)
+    selected_object_detection_text = ft.Text("No file selected.")
+    page.overlay.append(object_detection_picker)
+
+    classification_picker = ft.FilePicker(on_result=object_classification_result)
+    selected_classification_text = ft.Text("No file selected.")
+    page.overlay.append(classification_picker)
+
+    def delete_model_item(item_path, type, list_component):
+        if os.path.exists(item_path):
+            if os.path.isfile(item_path):
+                os.remove(item_path)
+            elif os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+            print("Deleted:", item_path)
+            if not os.path.exists(os.path.join(app_data_path, settings_data["models"][type]["selected"])):
+                settings_data["models"][type]["selected"] = ""
+                updateSettingsJson(settings_data)
+        else:
+            print("Path does not exist:", item_path)
+        create_list_item(list_component, type)
+
+    def select_model_item(item_path, name, type, list_component):
+        if os.path.exists(item_path):            
+            settings_data["models"][type]["selected"] = f"models/{type}/{name}"
+            updateSettingsJson(settings_data)
+        else:
+            print("Path does not exist:", item_path)
+        create_list_item(list_component, type)
+
+    object_detection_selected = ft.Text(f"{os.path.basename((os.path.join(app_data_path, settings_data["models"]["ObjectDetection"]["selected"]) if settings_data["models"]["ObjectDetection"]["selected"] else os.path.basename(os.path.join(app_data_path, settings_data["models"]["ObjectDetection"]["default"]) )))}", expand=1)
+    classification_selected = ft.Text(f"{os.path.basename((os.path.join(app_data_path, settings_data["models"]["Classification"]["selected"]) if settings_data["models"]["Classification"]["selected"] else os.path.basename(os.path.join(app_data_path, settings_data["models"]["Classification"]["default"]) )))}", expand=1)
+    def create_list_item(list_component, type):
+        list_component.controls.clear()
+        folder = os.path.join(app_data_path, "models", type)
+        default =  os.path.join(app_data_path, settings_data["models"][type]["default"])
+        selected =  os.path.join(app_data_path, settings_data["models"][type]["selected"])
+        for item in os.listdir(folder):
+            print(item)
+            item_path = os.path.join(folder, item)
+            print("item",item_path)
+            if os.path.samefile(item_path, default):  
+                if settings_data["models"][type]["selected"] == "" or os.path.samefile(default, selected):
+                    list_component.controls.append(
+                        ft.Container(
+                                ft.Row([
+                                    ft.Text(f"{item} (default)", expand=1),
+                                    ft.Icon(name=ft.Icons.CHECK_BOX),
+                                    ]),
+                                border=ft.border.all(1, ft.Colors.BLUE),  # 1px black border
+                                    padding=10,
+                                    border_radius=5,
+                                    height=70)
+                         ) 
+                else:             
+                    list_component.controls.append(
+                        ft.Container(
+                                ft.Row([
+                                    ft.Text(f"{item} (default)", expand=1),
+                                    ft.IconButton(icon=ft.Icons.CHECK_BOX_OUTLINE_BLANK, on_click=lambda e, p=item_path, n=item: select_model_item(p,n, type, list_component))
+                                ]),
+                                border=ft.border.all(1, ft.Colors.BLUE),  # 1px black border
+                                    padding=10,
+                                    border_radius=5,
+                                    height=70)
+                         ) 
+            #selected image
+            elif os.path.samefile(item_path, selected):
+                list_component.controls.append(
+                    ft.Container(
+                        ft.Row([
+                            ft.Text(f"{item} (selected)", expand=1),
+                            ft.Icon(name=ft.Icons.CHECK_BOX),
+                            ft.IconButton(icon=ft.Icons.DELETE, on_click=lambda e, p=item_path: delete_model_item(p, type, list_component))
+                        ]),
+                         border=ft.border.all(1, ft.Colors.GREEN),  # 1px black border
+                            padding=10,
+                            border_radius=5,
+                            height=70)
+                )
+            #Not selected
+            else:
+                list_component.controls.append(
+                    ft.Container(
+                        ft.Row([
+                            ft.Text(f"{item}", expand=1),
+                            ft.IconButton(icon=ft.Icons.CHECK_BOX_OUTLINE_BLANK, on_click=lambda e, p=item_path, n=item: select_model_item(p,n, type, list_component)),
+                            ft.IconButton(icon=ft.Icons.DELETE, on_click=lambda e, p=item_path: delete_model_item(p, type, list_component))
+                        ]),
+                         border=ft.border.all(1, ft.Colors.BLACK),  # 1px black border
+                            padding=10,
+                            border_radius=5,
+                            height=70)
+                    )
+        if type == "ObjectDetection":
+            object_detection_selected.value = f"{os.path.basename((os.path.join(app_data_path, settings_data["models"]["ObjectDetection"]["selected"]) if settings_data["models"]["ObjectDetection"]["selected"] else os.path.basename(os.path.join(app_data_path, settings_data["models"]["ObjectDetection"]["default"]) )))}"
+        else:
+            classification_selected.value = f"{os.path.basename((os.path.join(app_data_path, settings_data["models"]["Classification"]["selected"]) if settings_data["models"]["Classification"]["selected"] else os.path.basename(os.path.join(app_data_path, settings_data["models"]["Classification"]["default"]) )))}"
+
+        page.update()            
+
+    def object_detection_upload(e):
+        try:
+            if object_detection_picker.result or object_detection_picker.result.files:
+                if object_detection_picker.result.files:            
+                    selected_path = object_detection_picker.result.files[0].path
+                    dst = os.path.join(app_data_path,"models","ObjectDetection")
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(selected_path, dst)
+                    settings_data["models"]["ObjectDetection"]["selected"] = f"models/ObjectDetection/{object_detection_picker.result.files[0].name}"
+                elif object_detection_picker.result.path:   
+                    base_name = os.path.basename(object_detection_picker.result.path.rstrip("/\\"))         
+                    selected_path = object_detection_picker.result.path
+                    shutil.copytree(selected_path, os.path.join(app_data_path,"models","ObjectDetection", base_name), dirs_exist_ok=True)
+                    settings_data["models"]["ObjectDetection"]["selected"] = f"models/ObjectDetection/{base_name}"
+            updateSettingsJson(settings_data)
+            create_list_item(object_detection_models_list, "ObjectDetection")
+            selected_object_detection_text.value = "No file or folder selected."
+            page.update()
+            show_success()
+        except Exception as e:
+            show_error()
+    
+    def classification_upload(e):
+        try:
+            if classification_picker.result or classification_picker.result.files:
+                if classification_picker.result.files:            
+                    selected_path = classification_picker.result.files[0].path
+                    dst = os.path.join(app_data_path,"models","Classification")
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(selected_path, dst)
+                    settings_data["models"]["Classification"]["selected"] = f"models/Classification/{classification_picker.result.files[0].name}"
+                elif classification_picker.result.path:   
+                    base_name = os.path.basename(classification_picker.result.path.rstrip("/\\"))         
+                    selected_path = classification_picker.result.path
+                    shutil.copytree(selected_path, os.path.join(app_data_path,"models","Classification", base_name), dirs_exist_ok=True)
+                    settings_data["models"]["Classification"]["selected"] = f"models/Classification/{base_name}"
+            updateSettingsJson(settings_data)
+            create_list_item(classification_models_list, "Classification")
+            selected_object_detection_text.value = "No file or folder selected."
+            page.update()
+            show_success()
+        except Exception as e:
+            show_error()
+
+    object_detection_models_list = ft.ListView(expand=True, spacing=10)
+    create_list_item(object_detection_models_list, "ObjectDetection")
+    classification_models_list = ft.ListView(expand=True, spacing=10)
+    create_list_item(classification_models_list, "Classification")
+    detection_model_settings = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Please select or upload object detection models models used during analysis"),
+        content=ft.Container(
+            content=ft.Column([
+                    object_detection_models_list,
+                    ft.Row([
+                        ft.ElevatedButton("Pick File(s)", on_click=lambda e: object_detection_picker.pick_files()),
+                        ft.ElevatedButton("Pick Folder", on_click=lambda e: object_detection_picker.get_directory_path())
+                    ]),
+                    ft.Row([selected_object_detection_text, ft.ElevatedButton(text="Add model", bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE, on_click=object_detection_upload)])
+                ], tight=True),
+            width=300,
+            height=300,
+            alignment=ft.alignment.center
+        ),
+        actions=[
+            ft.TextButton("Back", on_click=lambda e: switch_dialogs(detection_model_settings, analysis_model_settings)),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+        on_dismiss=lambda e: print("close"),
+    )
+
+    classification_model_settings = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Please select or upload classification models models used during analysis"),
+        content=ft.Container(
+            content=ft.Column([
+                    classification_models_list,
+                    ft.Row([
+                        ft.ElevatedButton("Pick File(s)", on_click=lambda e: classification_picker.pick_files()),
+                        ft.ElevatedButton("Pick Folder", on_click=lambda e: classification_picker.get_directory_path())
+                    ]),
+                    ft.Row([selected_classification_text, ft.ElevatedButton(text="Add model", bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE, on_click=classification_upload)])
+                ], tight=True),
+            width=300,
+            height=300,
+            alignment=ft.alignment.center
+        ),
+        actions=[
+            ft.TextButton("Back", on_click=lambda e: switch_dialogs(classification_model_settings, analysis_model_settings)),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+        on_dismiss=lambda e: print("close"),
+    )
+
+    def switch_dialogs(from_item, to_item):
+        page.close(from_item)
+        page.open(to_item)
+        page.update()
+        
     analysis_model_settings = ft.AlertDialog(
         modal=True,
-        title=ft.Text("Please select an analysis model, the default value will be used"),
-        content=ft.Text("Do you"),
+        title=ft.Text("Please select or upload the models models used during analysis"),
+        content=ft.Container(
+            content=ft.Column([
+                        ft.Text("Object detection",
+                                weight=ft.FontWeight.BOLD),
+                        ft.Container(
+                            ft.Row([
+                                    object_detection_selected,
+                                    ft.IconButton(icon=ft.Icons.EDIT, on_click=lambda e: switch_dialogs(analysis_model_settings, detection_model_settings))
+                                ]),
+                            border=ft.border.all(1, ft.Colors.BLACK),  # 1px black border
+                            padding=10,
+                            border_radius=5),
+                        ft.Text("Classification",
+                                weight=ft.FontWeight.BOLD),
+                        ft.Container(
+                            ft.Row([
+                                    classification_selected,
+                                    ft.IconButton(icon=ft.Icons.EDIT, on_click=lambda e: switch_dialogs(analysis_model_settings, classification_model_settings))
+                                ]),
+                            border=ft.border.all(1, ft.colors.BLACK),  # 1px black border
+                            padding=10,
+                            border_radius=5)
+                ], tight=True),
+            width=300,
+            height=300,
+            alignment=ft.alignment.center
+        ),
         actions=[
-            ft.TextButton("Save", on_click=lambda e: page.close(analysis_model_settings)),
-            ft.TextButton("Cancel", on_click=lambda e: page.close(analysis_model_settings)),
+            ft.TextButton("Back", on_click=lambda e: page.close(analysis_model_settings)),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
         on_dismiss=lambda e: print("Modal dialog dismissed!"),
@@ -946,9 +1199,10 @@ def main(page: ft.Page):
         page.update()
 
     def view_pop(view):
-        page.views.pop()
-        top_view = page.views[-1]
-        page.go(top_view.route)
+        if len(page.views) > 1:
+            page.views.pop()
+            top_view = page.views[-1]
+            page.go(top_view.route)
 
     page.on_route_change = route_change
     page.on_view_pop = view_pop

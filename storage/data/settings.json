@@ -1,8 +1,8 @@
 {
     "models": {
         "ObjectDetection": {
-            "default": "models/ObjectDetection/yolo11l.pt",
-            "selected": "models/ObjectDetection/train_1024 with aug.pt"
+            "default": "models/ObjectDetection/metadata.yaml",
+            "selected": "models/ObjectDetection/metadata.yaml"
         },
         "Classification": {
             "default": "models/Classification/yolo11l-cls.pt",
