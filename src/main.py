@@ -1,6 +1,7 @@
 import flet as ft
 import os
 import json
+import sys
 import shutil
 from flet import FilePickerUploadFile
 from datetime import datetime, timedelta, timezone
@@ -16,9 +17,25 @@ from ultralytics import YOLO
 import cv2
 import types
 from itertools import islice
+from platformdirs import user_data_dir
+print("=== App is starting ===")
 
-app_data_path = os.getenv("FLET_APP_STORAGE_DATA")
+def get_install_folder():
+
+    if os.getenv("FLET_APP_STORAGE_DATA"):
+        return os.getenv("FLET_APP_STORAGE_DATA")
+    path = user_data_dir(appname="litteranalysis/flet/app",  appauthor="City to Ocean", roaming=True)
+    os.makedirs(path, exist_ok=True)
+    return path
+print("APPDATA:", os.getenv("APPDATA"))
+print("LOCALAPPDATA:", os.getenv("LOCALAPPDATA"))
+app_data_base_path = get_install_folder()
+app_data_path = os.path.join(app_data_base_path, "app-storage")
+os.makedirs(app_data_path, exist_ok=True)
+print(app_data_path)
 settings_path = os.path.join(app_data_path, "settings.json")
+
+
 
 db = None
 #bucket = None
@@ -49,20 +66,29 @@ def reinitialize_firebase(credential_path, bucket_name):
     except Exception as e:
         print("Firebase:", e)
 
+settings_data = {}
+def create_settings():
+    global settings_data
+    try:
+        with open(settings_path, "r") as file:
+            settings_data = json.load(file)
+    except Exception as e:
+        print("Failed to read JSON:", e)
 
-try:
-    with open(settings_path, "r") as file:
-        settings_data = json.load(file)
-except Exception as e:
-    print("Failed to read JSON:", e)
-
-if os.path.exists(os.path.join(app_data_path,settings_data["FirebaseCredentials"]["path"])) and settings_data["FirebaseCredentials"]["StorageBucket"]:
-    reinitialize_firebase(settings_data["FirebaseCredentials"]["path"], settings_data["FirebaseCredentials"]["StorageBucket"])
-else:
-    print("File not found.")
+    if os.path.exists(os.path.join(app_data_path,settings_data["FirebaseCredentials"]["path"])) and settings_data["FirebaseCredentials"]["StorageBucket"]:
+        reinitialize_firebase(settings_data["FirebaseCredentials"]["path"], settings_data["FirebaseCredentials"]["StorageBucket"])
+    else:
+        print("File not found.")
 
 
 def main(page: ft.Page):
+
+    if not os.path.exists(settings_path):
+        shutil.copytree(os.path.join(app_data_base_path, "assets", "setup"), app_data_path, dirs_exist_ok=True)
+        print("copied")
+    
+    create_settings()
+
     sucess_message = ft.SnackBar(
         duration="3000",
         content=ft.Text("✅ Upload successful!", color=ft.Colors.GREEN),
@@ -407,7 +433,7 @@ def main(page: ft.Page):
                                     classification_selected,
                                     ft.IconButton(icon=ft.Icons.EDIT, on_click=lambda e: switch_dialogs(analysis_model_settings, classification_model_settings))
                                 ]),
-                            border=ft.border.all(1, ft.colors.BLACK),  # 1px black border
+                            border=ft.border.all(1, ft.Colors.BLACK),  # 1px black border
                             padding=10,
                             border_radius=5)
                 ], tight=True),
@@ -1209,4 +1235,4 @@ def main(page: ft.Page):
     page.go(page.route)
 
 
-ft.app(main, upload_dir=app_data_path, )
+ft.app(main, upload_dir=app_data_path, assets_dir="assets")

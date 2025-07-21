@@ -1,0 +1,17 @@
+{
+    "models": {
+        "ObjectDetection": {
+            "default": "models/ObjectDetection/WasteTypeFirst.pt",
+            "selected": "models/ObjectDetection/WasteTypeFirst.pt"
+        },
+        "Classification": {
+            "default": "models/Classification/BrandsFirst.pt",
+            "selected": "models/Classification/BrandsFirst.pt"
+        },
+        "batch_size": 5
+    },
+    "FirebaseCredentials": {
+        "path": "FirebaseCredentials/credentials.json",
+        "StorageBucket": ""
+    }
+}

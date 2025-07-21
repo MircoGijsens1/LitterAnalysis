@@ -1,17 +1,17 @@
 {
     "models": {
         "ObjectDetection": {
-            "default": "models/ObjectDetection/metadata.yaml",
-            "selected": "models/ObjectDetection/metadata.yaml"
+            "default": "models/ObjectDetection/WasteTypeFirst.pt",
+            "selected": "models/ObjectDetection/WasteTypeFirst.pt"
         },
         "Classification": {
-            "default": "models/Classification/yolo11l-cls.pt",
-            "selected": "models/Classification/brand_audit_brands_cropped_m150_aug_res_95.pt"
+            "default": "models/Classification/BrandsFirst.pt",
+            "selected": "models/Classification/BrandsFirst.pt"
         },
         "batch_size": 5
     },
     "FirebaseCredentials": {
         "path": "FirebaseCredentials/credentials.json",
-        "StorageBucket": "essential-truth-451001-i2.firebasestorage.app"
+        "StorageBucket": ""
     }
 }
