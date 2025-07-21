@@ -19,8 +19,23 @@ import types
 from itertools import islice
 from platformdirs import user_data_dir
 print("=== App is starting ===")
-
+def get_app_data_path(app_name="litteranalysis", org_name="City to Ocean"):
+    #if os.getenv("FLET_APP_STORAGE_DATA"):
+    #    return os.getenv("FLET_APP_STORAGE_DATA")
+    if sys.platform.startswith("win"):
+        # Windows (try %APPDATA%, fallback to manual Roaming path)
+        appdata = os.getenv("APPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Roaming")
+        path = os.path.join(appdata, org_name, app_name, "flet", "app")
+    elif sys.platform == "darwin":
+        path = os.path.join(os.path.expanduser("~/Library/Application Support"), org_name, app_name, "flet", "app")
+    else:
+        # Linux or others: ~/.local/share
+        path = os.path.join(os.path.expanduser("~/.local/share"), org_name, app_name, "flet", "app")
+    
+    os.makedirs(path, exist_ok=True)
+    return path
 def get_install_folder():
+
 
     if os.getenv("FLET_APP_STORAGE_DATA"):
         return os.getenv("FLET_APP_STORAGE_DATA")
@@ -29,8 +44,8 @@ def get_install_folder():
     return path
 print("APPDATA:", os.getenv("APPDATA"))
 print("LOCALAPPDATA:", os.getenv("LOCALAPPDATA"))
-app_data_base_path = get_install_folder()
-app_data_path = os.path.join(app_data_base_path, "app-storage")
+app_data_base_path = get_app_data_path(app_name="litteranalysis", org_name="City to Ocean")
+app_data_path = os.getenv("FLET_APP_STORAGE_DATA") #os.path.join(app_data_base_path, "app-storage")
 os.makedirs(app_data_path, exist_ok=True)
 print(app_data_path)
 settings_path = os.path.join(app_data_path, "settings.json")
